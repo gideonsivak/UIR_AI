@@ -1,8 +1,20 @@
 
 """SQLAlchemy models preserving the API's existing string-ID data shape."""
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    text,
+)
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from .database import Base
 
@@ -60,7 +72,10 @@ class Plant(Base):
     )
 
     user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
@@ -113,6 +128,14 @@ class Plant(Base):
 class PlantAnalysis(Base):
     __tablename__ = "plant_analyses"
 
+    __table_args__ = (
+        CheckConstraint(
+            "ai_confidence IS NULL OR "
+            "(ai_confidence >= 0 AND ai_confidence <= 100)",
+            name="ck_plant_analyses_ai_confidence_range",
+        ),
+    )
+
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
@@ -120,7 +143,10 @@ class PlantAnalysis(Base):
     )
 
     plant_id: Mapped[str] = mapped_column(
-        ForeignKey("plants.id", ondelete="CASCADE"),
+        ForeignKey(
+            "plants.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         unique=True,
         index=True,
@@ -148,13 +174,63 @@ class PlantAnalysis(Base):
         nullable=False,
     )
 
-    # NEW: Teacher's required Boolean field.
-    # Existing records receive False during migration.
+    # Existing field — preserve old records and behavior.
     expert_advice_needed: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=False,
         server_default=text("0"),
+    )
+
+    # --------------------------------------------------
+    # NEW: AI SELF-ESTIMATED CONFIDENCE
+    # --------------------------------------------------
+
+    # NULL for legacy records without confidence.
+    # Valid values: 0 through 100.
+    ai_confidence: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    # --------------------------------------------------
+    # NEW: PLANT IMAGE MATCH STATUS
+    # --------------------------------------------------
+
+    # YES / NO / UNCERTAIN / NOT_CHECKED
+    # Only completed, accepted diagnoses are saved.
+    plant_match: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    # --------------------------------------------------
+    # NEW: CATEGORY MATCH STATUS
+    # --------------------------------------------------
+
+    # YES / NO / UNCERTAIN
+    category_match: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    # --------------------------------------------------
+    # NEW: SMART INTERVIEW ANSWERS
+    # --------------------------------------------------
+
+    # JSON text example:
+    # [
+    #   {
+    #     "question_id": "q1",
+    #     "question": "How often do you water the plant?",
+    #     "answer": "Every morning"
+    #   }
+    # ]
+    #
+    # NULL for analyses created without an interview.
+    interview_answers: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
     )
 
     plant: Mapped[Plant] = relationship(

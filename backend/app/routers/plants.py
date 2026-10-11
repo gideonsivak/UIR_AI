@@ -7,36 +7,68 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..models import Plant, PlantAnalysis, User
-from ..schemas import PlantCreate, PlantResponse, PlantUpdate
+from ..schemas import (
+    InterviewAnswer,
+    PlantCreate,
+    PlantResponse,
+    PlantUpdate,
+)
 
 
-router = APIRouter(prefix="/api/plants", tags=["Plants"])
+router = APIRouter(
+    prefix="/api/plants",
+    tags=["Plants"],
+)
+
 logger = logging.getLogger(__name__)
 
+
+# --------------------------------------------------
+# SHARED HELPERS
+# --------------------------------------------------
 
 def now() -> str:
     """Return the current UTC timestamp."""
     return datetime.now(timezone.utc).isoformat()
 
 
-def storage_failure(db: Session, error: SQLAlchemyError) -> None:
+def storage_failure(
+    db: Session,
+    error: SQLAlchemyError,
+) -> None:
     """Rollback failed database operations."""
+
     db.rollback()
-    logger.exception("Plant database operation failed", exc_info=error)
+
+    logger.exception(
+        "Plant database operation failed",
+        exc_info=error,
+    )
+
     raise HTTPException(
         status_code=500,
-        detail="Plant storage is unavailable. Please try again later.",
+        detail=(
+            "Plant storage is unavailable. "
+            "Please try again later."
+        ),
     ) from error
 
 
-def get_plant_or_404(db: Session, plant_id: str) -> Plant:
+def get_plant_or_404(
+    db: Session,
+    plant_id: str,
+) -> Plant:
     """Find a plant and load its saved analysis."""
+
     plant = db.scalar(
         select(Plant)
         .options(selectinload(Plant.analysis))
@@ -52,8 +84,12 @@ def get_plant_or_404(db: Session, plant_id: str) -> Plant:
     return plant
 
 
-def ensure_user(db: Session, user_id: str) -> None:
+def ensure_user(
+    db: Session,
+    user_id: str,
+) -> None:
     """Ensure the supplied user exists."""
+
     if db.get(User, user_id) is None:
         raise HTTPException(
             status_code=404,
@@ -61,41 +97,108 @@ def ensure_user(db: Session, user_id: str) -> None:
         )
 
 
-def parse_care_suggestions(value: str | None) -> list[str] | None:
-    """Safely decode a stored JSON array of care suggestions.
+# --------------------------------------------------
+# SAFE JSON PARSING
+# --------------------------------------------------
 
-    Invalid legacy values return None instead of crashing the API.
-    """
+def parse_care_suggestions(
+    value: str | None,
+) -> list[str] | None:
+    """Safely decode stored care suggestions."""
 
     if not value:
         return None
 
     try:
         parsed = json.loads(value)
+
     except (json.JSONDecodeError, TypeError):
-        logger.warning("Invalid legacy care suggestions JSON found")
+        logger.warning(
+            "Invalid legacy care suggestions JSON found"
+        )
         return None
 
     if not isinstance(parsed, list):
-        logger.warning("Stored care suggestions are not a JSON array")
+        logger.warning(
+            "Stored care suggestions are not a JSON array"
+        )
         return None
 
     if len(parsed) != 3:
-        logger.warning("Stored care suggestions have an invalid length")
+        logger.warning(
+            "Stored care suggestions have an invalid length"
+        )
         return None
 
     if not all(
         isinstance(item, str) and item.strip()
         for item in parsed
     ):
-        logger.warning("Stored care suggestions contain invalid values")
+        logger.warning(
+            "Stored care suggestions contain invalid values"
+        )
         return None
 
-    return [item.strip() for item in parsed]
+    return [
+        item.strip()
+        for item in parsed
+    ]
 
+
+def parse_interview_answers(
+    value: str | None,
+) -> list[dict] | None:
+    """Safely decode and validate saved interview answers."""
+
+    if not value:
+        return None
+
+    try:
+        parsed = json.loads(value)
+
+        if not isinstance(parsed, list):
+            raise ValueError(
+                "Interview answers must be a list"
+            )
+
+        if not 3 <= len(parsed) <= 5:
+            raise ValueError(
+                "Interview must contain 3–5 answers"
+            )
+
+        answers = [
+            InterviewAnswer.model_validate(item)
+            for item in parsed
+        ]
+
+        question_ids = [
+            answer.question_id
+            for answer in answers
+        ]
+
+        if len(set(question_ids)) != len(question_ids):
+            raise ValueError(
+                "Duplicate interview question IDs"
+            )
+
+        return [
+            answer.model_dump(mode="json")
+            for answer in answers
+        ]
+
+    except (ValueError, TypeError, ValidationError):
+        logger.warning(
+            "Invalid saved interview answers JSON found"
+        )
+        return None
+
+
+# --------------------------------------------------
+# DATABASE MODEL -> API RESPONSE
+# --------------------------------------------------
 
 def as_response(plant: Plant) -> dict:
-    """Convert a SQLAlchemy Plant into the existing API response format."""
+    """Convert SQLAlchemy Plant to API response data."""
 
     analysis = None
 
@@ -104,18 +207,43 @@ def as_response(plant: Plant) -> dict:
             plant.analysis.care_suggestions
         )
 
-        # A corrupted legacy analysis must not crash the entire
-        # plant listing or prevent the plant from being displayed.
+        # Corrupted legacy analysis must not crash the API.
         if suggestions is not None:
+            saved = plant.analysis
+
             analysis = {
-                "possible_issue": plant.analysis.possible_issue,
-                "explanation": plant.analysis.explanation,
+                "possible_issue": saved.possible_issue,
+                "explanation": saved.explanation,
                 "care_suggestions": suggestions,
-                "expert_advice": plant.analysis.expert_advice,
+                "expert_advice": saved.expert_advice,
                 "expert_advice_needed": bool(
-                    plant.analysis.expert_advice_needed
+                    saved.expert_advice_needed
                 ),
             }
+
+            # Include new fields only when values exist.
+            if saved.ai_confidence is not None:
+                analysis["ai_confidence"] = (
+                    saved.ai_confidence
+                )
+
+            if saved.plant_match is not None:
+                analysis["plant_match"] = (
+                    saved.plant_match
+                )
+
+            if saved.category_match is not None:
+                analysis["category_match"] = (
+                    saved.category_match
+                )
+
+            if saved.interview_answers is not None:
+                answers = parse_interview_answers(
+                    saved.interview_answers
+                )
+
+                if answers is not None:
+                    analysis["interview_answers"] = answers
 
     return {
         "id": plant.id,
@@ -130,18 +258,110 @@ def as_response(plant: Plant) -> dict:
     }
 
 
-def set_analysis(plant: Plant, analysis) -> None:
-    """Create, replace, update, or clear a plant's structured analysis."""
+# --------------------------------------------------
+# RESPONSE SERIALIZATION
+# --------------------------------------------------
+
+def plant_json_response(
+    data: dict | list,
+    status_code: int = 200,
+) -> JSONResponse:
+    """
+    Preserve analysis=null when no analysis exists.
+
+    Omit unused optional fields inside an analysis.
+    Validate the response structure before sending it.
+    """
+
+    if isinstance(data, list):
+        validated = [
+            PlantResponse.model_validate(item).model_dump(
+                mode="json",
+                exclude={
+                    "analysis": {
+                        "ai_confidence",
+                        "plant_match",
+                        "category_match",
+                        "interview_answers",
+                    }
+                } if item.get("analysis") is None else None,
+            )
+            for item in data
+        ]
+
+    else:
+        validated = PlantResponse.model_validate(
+            data
+        ).model_dump(mode="json")
+
+        # Remove only absent optional analysis fields.
+        if isinstance(data.get("analysis"), dict):
+            for field in (
+                "ai_confidence",
+                "plant_match",
+                "category_match",
+                "interview_answers",
+            ):
+                if field not in data["analysis"]:
+                    validated["analysis"].pop(field, None)
+
+    # Apply the same cleanup to list responses.
+    if isinstance(data, list):
+        for original, item in zip(data, validated):
+            if not isinstance(original.get("analysis"), dict):
+                continue
+
+            for field in (
+                "ai_confidence",
+                "plant_match",
+                "category_match",
+                "interview_answers",
+            ):
+                if field not in original["analysis"]:
+                    item["analysis"].pop(field, None)
+
+    return JSONResponse(
+        status_code=status_code,
+        content=jsonable_encoder(validated),
+    )
+
+
+# --------------------------------------------------
+# API ANALYSIS -> DATABASE MODEL
+# --------------------------------------------------
+
+def set_analysis(
+    plant: Plant,
+    analysis,
+) -> None:
+    """Create, replace, update, or clear plant analysis."""
 
     if analysis is None:
         plant.analysis = None
         return
 
-    values = analysis.model_dump()
+    values = analysis.model_dump(mode="json")
 
     suggestions_json = json.dumps(
         values["care_suggestions"],
         ensure_ascii=False,
+    )
+
+    ai_confidence = values.get("ai_confidence")
+    plant_match = values.get("plant_match")
+    category_match = values.get("category_match")
+
+    interview_answers = values.get(
+        "interview_answers"
+    )
+
+    interview_answers_json = (
+        json.dumps(
+            interview_answers,
+            ensure_ascii=False,
+        )
+        if interview_answers is not None
+        else None
     )
 
     if plant.analysis is None:
@@ -151,15 +371,41 @@ def set_analysis(plant: Plant, analysis) -> None:
             explanation=values["explanation"],
             care_suggestions=suggestions_json,
             expert_advice=values["expert_advice"],
-            expert_advice_needed=values["expert_advice_needed"],
+            expert_advice_needed=values[
+                "expert_advice_needed"
+            ],
+            ai_confidence=ai_confidence,
+            plant_match=plant_match,
+            category_match=category_match,
+            interview_answers=interview_answers_json,
         )
         return
 
-    plant.analysis.possible_issue = values["possible_issue"]
-    plant.analysis.explanation = values["explanation"]
+    # Replace complete existing analysis.
+    plant.analysis.possible_issue = values[
+        "possible_issue"
+    ]
+
+    plant.analysis.explanation = values[
+        "explanation"
+    ]
+
     plant.analysis.care_suggestions = suggestions_json
-    plant.analysis.expert_advice = values["expert_advice"]
-    plant.analysis.expert_advice_needed = values["expert_advice_needed"]
+
+    plant.analysis.expert_advice = values[
+        "expert_advice"
+    ]
+
+    plant.analysis.expert_advice_needed = values[
+        "expert_advice_needed"
+    ]
+
+    plant.analysis.ai_confidence = ai_confidence
+    plant.analysis.plant_match = plant_match
+    plant.analysis.category_match = category_match
+    plant.analysis.interview_answers = (
+        interview_answers_json
+    )
 
 
 # --------------------------------------------------
@@ -180,7 +426,9 @@ def create_plant(
 
         timestamp = now()
 
-        values = payload.model_dump(exclude={"analysis"})
+        values = payload.model_dump(
+            exclude={"analysis"}
+        )
 
         plant = Plant(
             id=str(uuid4()),
@@ -189,17 +437,23 @@ def create_plant(
             updated_at=timestamp,
         )
 
-        set_analysis(plant, payload.analysis)
+        set_analysis(
+            plant,
+            payload.analysis,
+        )
 
         db.add(plant)
         db.commit()
-
         db.refresh(plant)
 
-        return as_response(plant)
+        return plant_json_response(
+            as_response(plant),
+            status_code=201,
+        )
 
     except HTTPException:
         raise
+
     except SQLAlchemyError as error:
         storage_failure(db, error)
 
@@ -224,11 +478,18 @@ def list_plants(
         )
 
         if user_id:
-            query = query.where(Plant.user_id == user_id)
+            query = query.where(
+                Plant.user_id == user_id
+            )
 
         plants = db.scalars(query).all()
 
-        return [as_response(plant) for plant in plants]
+        return plant_json_response(
+            [
+                as_response(plant)
+                for plant in plants
+            ]
+        )
 
     except SQLAlchemyError as error:
         storage_failure(db, error)
@@ -247,11 +508,18 @@ def get_plant(
     db: Session = Depends(get_db),
 ):
     try:
-        plant = get_plant_or_404(db, plant_id)
-        return as_response(plant)
+        plant = get_plant_or_404(
+            db,
+            plant_id,
+        )
+
+        return plant_json_response(
+            as_response(plant)
+        )
 
     except HTTPException:
         raise
+
     except SQLAlchemyError as error:
         storage_failure(db, error)
 
@@ -270,26 +538,44 @@ def update_plant(
     db: Session = Depends(get_db),
 ):
     try:
-        ensure_user(db, payload.user_id)
+        ensure_user(
+            db,
+            payload.user_id,
+        )
 
-        plant = get_plant_or_404(db, plant_id)
+        plant = get_plant_or_404(
+            db,
+            plant_id,
+        )
 
-        values = payload.model_dump(exclude={"analysis"})
+        values = payload.model_dump(
+            exclude={"analysis"}
+        )
 
         for key, value in values.items():
-            setattr(plant, key, value)
+            setattr(
+                plant,
+                key,
+                value,
+            )
 
-        set_analysis(plant, payload.analysis)
+        set_analysis(
+            plant,
+            payload.analysis,
+        )
 
         plant.updated_at = now()
 
         db.commit()
         db.refresh(plant)
 
-        return as_response(plant)
+        return plant_json_response(
+            as_response(plant)
+        )
 
     except HTTPException:
         raise
+
     except SQLAlchemyError as error:
         storage_failure(db, error)
 
@@ -307,12 +593,16 @@ def delete_plant(
     db: Session = Depends(get_db),
 ):
     try:
-        plant = get_plant_or_404(db, plant_id)
+        plant = get_plant_or_404(
+            db,
+            plant_id,
+        )
 
         db.delete(plant)
         db.commit()
 
     except HTTPException:
         raise
+
     except SQLAlchemyError as error:
         storage_failure(db, error)
