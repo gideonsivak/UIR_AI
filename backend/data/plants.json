@@ -1,0 +1,62 @@
+[
+  {
+    "id": "1c24002d-7086-40be-85b6-d086f49be835",
+    "user_id": "1eba6602-2528-42e0-b47c-d3283ffc5000",
+    "plant_name": "Jade Plant",
+    "plant_type": "Crassula ovata",
+    "location": "Jaffna, Srilanka",
+    "symptom": "yellow leaves",
+    "analysis": {
+      "possible_issue": "Possible environmental stress (DEMO)",
+      "explanation": "This is a DEMO response, not an AI diagnosis. Jade Plant  (Crassula ovata ) may be reacting to watering, light, or airflow conditions in Jaffna, Srilanka. Reported symptoms: yellow leaves.",
+      "care_suggestions": [
+        "Check that the soil is neither constantly wet nor completely dry.",
+        "Place the plant where it receives light suitable for its type.",
+        "Remove badly damaged leaves and inspect regularly for pests."
+      ],
+      "expert_advice": "Seek advice from a local agricultural expert if symptoms spread quickly, the plant is severely wilting, or pests are visible."
+    },
+    "created_at": "2026-10-09T03:49:35.802550+00:00",
+    "updated_at": "2026-10-09T03:49:35.802550+00:00"
+  },
+  {
+    "id": "a28e1ca2-9036-4986-8c90-1532d9addc00",
+    "user_id": "1eba6602-2528-42e0-b47c-d3283ffc5000",
+    "plant_name": "Tomato",
+    "plant_type": "Herbaceous Vegetable",
+    "location": "Jaffna, Srilanka",
+    "symptom": "causing upward leaf curling, yellowing, and stunted growth.",
+    "analysis": {
+      "possible_issue": "Suspected Tomato Leaf Curl Virus (ToLCV) or pest-induced stress",
+      "explanation": "Upward leaf curling, chlorosis (yellowing), and stunted development on tomato plants in warm, dry climates like Jaffna strongly suggest a begomovirus such as Tomato Leaf Curl Virus, which is commonly vectored by silverleaf whiteflies. However, these symptoms can also arise from physiological heat and drought stress, herbicide drift, or sap-sucking arthropods like broad mites. Because these potential causes share overlapping visual signs, a definitive diagnosis cannot be made without laboratory testing or closer inspection.",
+      "care_suggestions": [
+        "Inspect the undersides of leaves closely for tiny whiteflies or mites, and deploy yellow sticky traps to monitor and reduce insect populations.",
+        "Ensure consistent soil moisture by watering deeply at the root level and applying organic mulch to alleviate extreme heat and moisture stress.",
+        "Carefully rogue out and destroy severely stunted plants showing systemic viral symptoms to prevent potential transmission to nearby healthy tomatoes."
+      ],
+      "expert_advice": "Due to the risk of rapid viral spread across solanaceous crops in Jaffna, it is strongly recommended to contact the local Agricultural Instructor (AI) or visit the Department of Agriculture extension office in Jaffna for sample examination and tailored integrated pest management guidance."
+    },
+    "created_at": "2026-10-09T04:20:59.676707+00:00",
+    "updated_at": "2026-10-09T04:20:59.676707+00:00"
+  },
+  {
+    "id": "95167428-b77a-4365-9ef1-6bb340f497d9",
+    "user_id": "1eba6602-2528-42e0-b47c-d3283ffc5000",
+    "plant_name": "Bitter Gourd",
+    "plant_type": "Vegetable Crop",
+    "location": "Jaffna, Srilanka",
+    "symptom": "causing progressive wilting and plant decline.",
+    "analysis": {
+      "possible_issue": "Suspected soil-borne vascular wilt (such as Fusarium wilt or Bacterial wilt) or root damage complex",
+      "explanation": "Progressive wilting and decline in bitter gourd typically indicate a breakdown in the plant's vascular water-transport system or severe root damage. In regions like Jaffna, warm soil temperatures and intensive cultivation can favor vascular pathogens such as Fusarium oxysporum f. sp. momordicae or Ralstonia solanacearum, as well as root-knot nematodes. As the roots or lower stems become colonized or degraded, the vine cannot uptake sufficient water to meet transpiration demands, leading to gradual collapse. Because fungal wilts, bacterial pathogens, nematode feeding, and localized collar rots can cause nearly identical outward wilting patterns, physical inspection of internal vascular tissue and root structures is necessary before a definitive conclusion can be reached.",
+      "care_suggestions": [
+        "Carefully inspect the root zone and lower stem of an affected vine, checking for root-knot galls, dark rot, or vascular browning, and isolate or safely dispose of dying plants to avoid spreading soil-borne inocula.",
+        "Regulate field watering practices by avoiding waterlogging and preventing irrigation runoff from moving directly from diseased plant basins to healthy beds.",
+        "Enrich surrounding soil with well-composted organic matter and beneficial microbial inoculants (such as Trichoderma species) while planning subsequent crop rotations with non-cucurbit species."
+      ],
+      "expert_advice": "Because progressive wilt in cucurbits can spread rapidly and contaminate field soil for multiple seasons, contact the Jaffna District Agriculture Training Centre, the Thirunelvely Agricultural Research Station, or your local Agricultural Instructor (AI) under the Department of Agriculture for diagnostic testing and localized intervention guidelines."
+    },
+    "created_at": "2026-10-09T05:12:32.065235+00:00",
+    "updated_at": "2026-10-09T05:12:32.065235+00:00"
+  }
+]
